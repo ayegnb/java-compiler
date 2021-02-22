@@ -1,0 +1,231 @@
+
+// CUP specification for Cflat.
+// Hans de Nivelle
+
+import java_cup.runtime.* ; 
+
+parser code {:
+   public void syntax_error( Symbol next )
+   {
+      System. out. println( "Syntax Error at position " +
+                               ( next. left + 1 ) + "/" + next. right +
+                               " for lookahead " +
+                               sym. terminalNames [ next. sym ] +
+                               " with attribute " + next. value );
+   }
+
+   public Program parsetree;
+:}
+
+// Terminals (tokens returned by the tokenizer):
+
+terminal     ast.Bool         BOOLCONST;
+terminal     ast.Char         CHARCONST;
+terminal     ast.Integer      INTEGERCONST;
+terminal     ast.Double       DOUBLECONST;
+terminal     ast.String       STRINGCONST;
+terminal     ast.Pointer      POINTERCONST;
+terminal     ast.Identifier   IDENTIFIER;
+
+terminal          VOID, BOOL, CHAR, INTEGER, DOUBLE, POINTER, ARRAY;
+terminal          IF, THEN, ELSE, WHILE, DO, PRINT, RETURN;
+terminal          FUNCTION, STRUCTDEF, CONSTANT;
+terminal          BEGIN, END;
+terminal          LPAR, RPAR, LSQPAR, RSQPAR, COMMA, DOT, ARROW;
+terminal          COLON, SEMICOLON;
+terminal          ASSIGN;
+   // For the operators, I use python names as much as possible:
+terminal          QUESTION, OR, AND, NOT;
+terminal          EQ, NE, LT, GT, LE, GE;
+terminal          ADD, SUB, MUL, TRUEDIV, MOD;
+terminal          AMPERSAND, PLUSPLUS, MINUSMINUS;
+
+non terminal Program        Prog ; 
+non terminal java.util.ArrayList< type.Field > Decllist, Decllist2;
+non terminal type.Field                        Decl;
+non terminal type.Type                         Type;
+non terminal ast.Tree                          Stat;
+non terminal ast.Tree       Expr, Expr1, Expr2, Expr3, Expr4, Expr5, Expr6;
+non terminal ast.Tree       Expr7, Expr8, Expr9, Expr10, Expr11, Expr12;
+non terminal java.util.ArrayList< ast.Tree >   Exprlist, Exprlist2 ;
+non terminal java.util.ArrayList< ast.Tree >   Statlist ;
+
+Prog ::=   Prog CONSTANT IDENTIFIER:i ASSIGN BOOLCONST:b SEMICOLON
+              {: parsetree. addconstant( i. id, b ); :}
+
+         | Prog CONSTANT IDENTIFIER:i ASSIGN CHARCONST:c SEMICOLON
+              {: parsetree. addconstant( i. id, c ); :}
+         | Prog CONSTANT IDENTIFIER:i ASSIGN INTEGERCONST: j SEMICOLON
+              {: parsetree. addconstant( i. id, j ); :}
+         | Prog CONSTANT IDENTIFIER:i ASSIGN DOUBLECONST:d SEMICOLON
+               {: parsetree. addconstant( i. id, d ); :}
+
+         | Prog STRUCTDEF IDENTIFIER:i ASSIGN
+                 LPAR Decllist : lst RPAR SEMICOLON
+            {: parsetree. addstruct( i. id, lst ); :}
+         | Prog FUNCTION IDENTIFIER:i LPAR Decllist : params RPAR COLON
+           Type: rettype Stat: body
+           {: parsetree. addfunction( i. id, params, rettype, body ); :}
+         |
+            {: parsetree = new Program( ); :}
+         ;
+
+Decllist ::=
+         {: RESULT = new java.util.ArrayList< type.Field > ( ); :}
+         |
+         Decllist2 : lst
+         {: RESULT = lst; :}
+         ;
+
+Decllist2 ::= Decl : d
+                {: RESULT = new java.util.ArrayList< type.Field > ( );
+                        RESULT.add( d ); :}
+          |
+             Decllist2 : lst COMMA Decl : d
+                {: RESULT = lst; RESULT. add( d ); :}
+          ;
+
+Decl ::= IDENTIFIER:id COLON Type:tp
+         {:
+             RESULT = new type.Field( id. id, tp );
+         :}
+         ;
+
+Type ::=   VOID {: RESULT = new type.Void( ); :}
+         | BOOL {: RESULT = new type.Bool( ); :}
+         | CHAR {: RESULT = new type.Char( ); :}
+         | INTEGER {: RESULT = new type.Integer( ); :}
+         | DOUBLE {: RESULT = new type.Double( ); :}
+         | POINTER LPAR Type:tp RPAR {: RESULT = new type.Pointer( tp ); :}
+         | ARRAY LPAR INTEGERCONST:i COMMA Type:tp RPAR {: RESULT = new type.Array( i.i, tp ); :}
+         | ARRAY LPAR IDENTIFIER: id COMMA Type : tp RPAR
+              {: ast.Tree val = parsetree. constdefs. get( id.id );
+                 if( val == null )
+                    throw new SemanticError( "identifier " + id.id +
+                        " used as array size but has no constant definition" );
+                 if( val instanceof ast.Integer )
+                 {
+                    RESULT = new type.Array( ((ast.Integer) val).i, tp );
+                 }
+                 else
+                    throw new SemanticError( "identifier " + id.id +
+                       " used in array size but not defined as integer" );
+              :}
+         | IDENTIFIER:id
+                {: RESULT = new type.Struct(id.id); :}
+         ;
+
+Stat  ::=  IF Expr : cond THEN Stat : body
+              {: RESULT = new ast.Apply( "[if]", cond, body ); :}
+         |
+           IF Expr : cond THEN Stat:s1 ELSE Stat:s2
+              {: RESULT = new ast.Apply( "[if]", cond, s1, s2 ); :}
+         |
+           WHILE Expr : cond DO Stat: body
+              {: RESULT = new ast.Apply( "[while]", cond, body); :}
+         |
+           BEGIN Statlist : list END
+              {: RESULT = new ast.Apply( "[statlist]", list.toArray(new ast.Tree[0]) ); :}
+         |
+           PRINT Expr:e
+              {: RESULT = new ast.Apply("[print]", e); :}
+         |
+           PRINT STRINGCONST:e
+              {: RESULT = new ast.Apply("[print]", e); :}
+         |
+           RETURN Expr:e
+              {: RESULT = new ast.Apply("[return]", e); :}
+         |
+           Expr:e
+              {: RESULT = new ast.Apply("[expr]", e); :}
+         |
+           Decl: d
+              {: RESULT = new ast.Apply("[decl]", new ast.Identifier(d.f)); RESULT.type = d.tp; :}
+        ;
+
+Statlist ::= Stat:s {:
+                RESULT = new java.util.ArrayList< ast.Tree >();
+                RESULT.add(s);
+         :}
+        | Statlist:a SEMICOLON Stat:s {: a.add(s); RESULT = a; :}
+        ;
+
+Expr ::= Expr2:e1 ASSIGN Expr2:e21 {: RESULT = new ast.Apply("=", e1, e21 ); :}
+        | Expr2:e {: RESULT = e; :}
+        ;
+
+Expr2 ::= Expr3:e1 QUESTION Expr3:e21 COLON Expr3:e3 {: RESULT = new ast.Apply("??", e1, e21, e3); :}
+        | Expr3:e {: RESULT = e; :}
+        ;
+
+Expr3 ::= Expr3:e1 OR Expr4:e21 {: RESULT = new ast.Apply("??", e1, new ast.Bool(true), e21); :}
+        | Expr4:e {: RESULT = e; :}
+        ;
+
+Expr4 ::= Expr4:e1 AND Expr5:e21 {: RESULT = new ast.Apply("??", e1, e21, new ast.Bool(false)); :}
+        | Expr5:e {: RESULT = e; :}
+        ;
+
+Expr5 ::= NOT Expr5:e {: RESULT = new ast.Apply("??", e, new ast.Bool(false), new ast.Bool(true)); :}
+        | Expr6:e {: RESULT = e; :}
+        ;
+
+Expr6 ::= Expr7:e1 EQ Expr7:e21 {: RESULT = new ast.Apply("==", e1, e21 ); :}
+        | Expr7:e1 NE Expr7:e21 {: RESULT = new ast.Apply("!=", e1, e21 ); :}
+        | Expr7:e1 LT Expr7:e21 {: RESULT = new ast.Apply("<", e1, e21 ); :}
+        | Expr7:e1 GT Expr7:e21 {: RESULT = new ast.Apply(">", e1, e21 ); :}
+        | Expr7:e1 LE Expr7:e21 {: RESULT = new ast.Apply("<=", e1, e21 ); :}
+        | Expr7:e1 GE Expr7:e21 {: RESULT = new ast.Apply(">=", e1, e21 ); :}
+        | Expr7:e {: RESULT = e; :}
+        ;
+
+Expr7 ::= Expr7:e ADD Expr8:e1 {: RESULT = new ast.Apply("+", e, e1 ); :}
+        | Expr7:e SUB Expr8:e1 {: RESULT = new ast.Apply("-", e, e1 ); :}
+        | Expr8:e {: RESULT = e; :}
+        ;
+
+Expr8 ::= Expr8:e1 MUL Expr9:e21 {: RESULT = new ast.Apply("*", e1, e21 ); :}
+        | Expr8:e1 TRUEDIV Expr9:e21 {: RESULT = new ast.Apply("/", e1, e21 ); :}
+        | Expr8:e1 MOD Expr9:e21 {: RESULT = new ast.Apply("%", e1, e21 ); :}
+        | Expr9:e {: RESULT = e; :}
+        ;
+
+Expr9 ::= SUB Expr9:e {: RESULT = new ast.Apply( "-", e ); :}
+        | Expr10:e {: RESULT = e; :}
+        ;
+
+Expr10 ::= MUL Expr10:e {: RESULT = new ast.Apply( "*",  e ); :}
+        | AMPERSAND Expr10:e {: RESULT = new ast.Apply( "&",  e ); :}
+        | Expr11:e {: RESULT = e; :}
+        ;
+
+Expr11 ::= PLUSPLUS Expr11:e {: RESULT = new ast.Apply("[ppx]", e); :}
+        | MINUSMINUS Expr11:e {: RESULT = new ast.Apply("[mmx]", e); :}
+        | Expr12:e {: RESULT = e; :}
+        ;
+
+Expr12 ::= Expr12:e PLUSPLUS {: RESULT = new ast.Apply("[xpp]", e); :}
+        | Expr12:e MINUSMINUS {: RESULT = new ast.Apply("[xmm]", e); :}
+        | Expr12:e DOT IDENTIFIER:i {: RESULT = new ast.Select(i.id, e); :}
+        | Expr12:e ARROW IDENTIFIER:i {: RESULT = new ast.Select(i.id, new ast.Apply( "*",  e )); :}
+        | Expr12:e LSQPAR Expr:e1 RSQPAR {: RESULT = new ast.Apply("*", new ast.Apply("+", e, e1)); :}
+        | IDENTIFIER:s {: RESULT = s; :}
+        | IDENTIFIER:s LPAR Exprlist:a RPAR {: RESULT = new ast.Apply( s.id, a.toArray(new ast.Tree[0]) ); :}
+        | BOOLCONST:b {: RESULT = b; :}
+        | CHARCONST:c {: RESULT = c; :}
+        | INTEGERCONST:i {: RESULT = i; :}
+        | DOUBLECONST:d {: RESULT = d; :}
+        | POINTERCONST:p {: RESULT = p; :}
+        | LPAR Expr:e RPAR {: RESULT = e; :}
+        ;
+
+Exprlist ::=
+         {: RESULT = new java.util.ArrayList< ast.Tree > ( ); :}
+        | Exprlist2 : lst
+         {: RESULT = lst; :}
+        ;
+
+Exprlist2 ::= Expr:e {: RESULT = new java.util.ArrayList< ast.Tree > ( ); RESULT.add(e); :}
+        | Exprlist2:a COMMA Expr:e {: a.add(e); RESULT = a; :}
+        ;
+

@@ -1,0 +1,54 @@
+structdef list = ( d: double, next: pointer( list ));
+structdef complex = ( re: double, im: double );
+constant pi = 3.141592653589793;
+
+function length( p : pointer( list )) : integer
+begin
+   len : integer; len = 0;
+      /* We don’t have syntax for immediate initialization */
+      /* of form integer len = 0; */
+
+   while p != null do
+   begin
+      ++ len;
+      p = p -> next
+   end;
+   return len
+end
+
+function fact( n : integer ) : double
+begin
+   res : integer;
+   res = 1.0;
+   while n != 0 do
+   begin
+      res = res * n;
+      -- n
+   end;
+   return res
+end
+
+function sum( c1 : complex, c2 : complex ) : complex
+begin
+   res : complex;
+   res. re = c1. re + c2. re;
+   res. im = c1. im + c2. im;
+   return res
+end
+
+function sinegrad( x : double ) : double
+begin
+   x = x * pi / 180;
+   kek : integer; kek = x >= 0 ? 1 : 2;
+   n : integer; n = 1;
+   sum = 0;
+   while sum + term != sum do
+   begin
+      sum = sum + term;
+      term = term * x * x / ( n + 1 ) / ( n + 2 );
+      n = n + 2
+   end;
+   return sum
+end
+
+##
